@@ -5,48 +5,62 @@ const getPedidos = asyncHandler( async (req, res) => {
     const pedidos = await Pedido.find({user: req.user.id});
     res.status(200).json(pedidos);
 });
-
-const calcularTotalPedido = async (articulos, cantidades) => {
-    try {
-        // Obtener los precios de los artículos
-        const precios = await Promise.all(articulos.map(async (nombre) => {
-            const articulo = await Articulo.findOne({ nombre });
-            console.log("art:",articulo)
-            return articulo.precio;
-        }));
-
-        // Calcular el precio total sumando el precio de cada artículo multiplicado por su cantidad
-        const total = precios.reduce((acc, precio, index) => {
-            return acc + (precio * cantidades[index]);
-        }, 0);
-
-        // Devolver el precio total
-        return total;
-    } catch (error) {
-        // Manejar cualquier error que ocurra durante la búsqueda de precios de los artículos
-        throw new Error('Error al calcular el precio total del pedido');
-    }
-};
-
 const crearPedidos = asyncHandler(async (req, res) => {
     if (!req.body.articulos || !req.body.cantidades) {
         res.status(400);
         throw new Error('Faltan artículos o cantidades');
     }
 
+    // Convertir los nombres de los artículos en ObjectId
+    const articulosObjectId = await Promise.all(req.body.articulos.map(async (nombreArticulo) => {
+        const articulo = await Articulo.findOne({ nombre: nombreArticulo });
+        if (!articulo) {
+            res.status(400);
+            throw new Error(`Artículo "${nombreArticulo}" no encontrado`);
+        }
+        return articulo._id;
+    }));
+
     // Calcular el precio total del pedido
     const total = await calcularTotalPedido(req.body.articulos, req.body.cantidades);
 
-    // Crear el pedido
+    // Crear el pedido con los ObjectId de los artículos
     const pedido = await Pedido.create({
-        articulos: req.body.articulos,
+        user: req.user.id,
+        articulos: articulosObjectId,
         cantidades: req.body.cantidades,
-        total,
-        user: req.user.id
+        total
     });
 
     res.status(201).json(pedido);
 });
+
+
+const calcularTotalPedido = async (articulos, cantidades) => {
+    try {
+        if (!Array.isArray(articulos)) {
+            throw new Error('Los artículos deben ser proporcionados como un array');
+        }
+        // Obtener los precios de los artículos
+        const precios = await Promise.all(articulos.map(async (nombreArticulo) => {
+            const articulo = await Articulo.findOne({ nombre: nombreArticulo });
+            if (!articulo) {
+                throw new Error(`Artículo con nombre "${nombreArticulo}" no encontrado`);
+            }
+            return articulo.precio;
+        }));
+
+        // Calcular el precio total sumando el precio de cada artículo multiplicado por su cantidad
+        const total = precios.reduce((acc, precio, index) => acc + (precio * cantidades[index]), 0);
+
+        return total;
+    } catch (error) {
+        console.error("Error al calcular el precio total del pedido:", error);
+        throw new Error('Error al calcular el precio total del pedido');
+    }
+};
+
+
 
 
 const modificarPedidos = asyncHandler( async (req, res) => {
