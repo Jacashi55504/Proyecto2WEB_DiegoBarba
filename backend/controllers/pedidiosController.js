@@ -1,30 +1,30 @@
 const asyncHandler = require("express-async-handler");
 const Pedido = require("../models/pedidoModel");
 const Articulo=require("../models/articuloModel")
+
+
 const getPedidos = asyncHandler( async (req, res) => {
     const pedidos = await Pedido.find({user: req.user.id});
     res.status(200).json(pedidos);
 });
+
 const crearPedidos = asyncHandler(async (req, res) => {
     if (!req.body.articulos || !req.body.cantidades) {
         res.status(400);
         throw new Error('Faltan artículos o cantidades');
     }
 
-    // Convertir los nombres de los artículos en ObjectId
+    // Convertir los nombres de los artículos en ObjectId, creando los artículos si no existen
     const articulosObjectId = await Promise.all(req.body.articulos.map(async (nombreArticulo) => {
-        const articulo = await Articulo.findOne({ nombre: nombreArticulo });
+        let articulo = await Articulo.findOne({ nombre: nombreArticulo });
         if (!articulo) {
-            res.status(400);
-            throw new Error(`Artículo "${nombreArticulo}" no encontrado`);
+            articulo = await Articulo.create({ nombre: nombreArticulo, precio: 0 });  // Precio por defecto, se puede ajustar
         }
         return articulo._id;
     }));
 
-    // Calcular el precio total del pedido
     const total = await calcularTotalPedido(req.body.articulos, req.body.cantidades);
 
-    // Crear el pedido con los ObjectId de los artículos
     const pedido = await Pedido.create({
         user: req.user.id,
         articulos: articulosObjectId,
@@ -34,7 +34,6 @@ const crearPedidos = asyncHandler(async (req, res) => {
 
     res.status(201).json(pedido);
 });
-
 
 const calcularTotalPedido = async (articulos, cantidades) => {
     try {
