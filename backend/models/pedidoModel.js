@@ -1,5 +1,6 @@
 const mongoose = require("mongoose")
 const Articulo =require('./articuloModel')
+
 const pedidoSchema = mongoose.Schema({
     user: {
         type: mongoose.Schema.Types.ObjectId,
@@ -13,9 +14,7 @@ const pedidoSchema = mongoose.Schema({
     cantidades:[{
         type:Number
 
-    }],
-        
-    
+    }],    
     total:{
         type:Number, 
         default:0

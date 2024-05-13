@@ -1,24 +1,23 @@
 const asyncHandler = require("express-async-handler");
 const Pedido = require("../models/pedidoModel");
-const Articulo=require("../models/articuloModel")
+const Articulo = require("../models/articuloModel");
 
-
-const getPedidos = asyncHandler( async (req, res) => {
-    const pedidos = await Pedido.find({user: req.user.id});
+const getPedidos = asyncHandler(async (req, res) => {
+    const pedidos = await Pedido.find({ user: req.user.id }).populate('articulos');
     res.status(200).json(pedidos);
 });
 
 const crearPedidos = asyncHandler(async (req, res) => {
-    if (!req.body.articulos || !req.body.cantidades) {
+    if (!req.body.articulos || !req.body.cantidades || !req.body.precios) {
         res.status(400);
-        throw new Error('Faltan artículos o cantidades');
+        throw new Error('Faltan artículos, cantidades o precios');
     }
 
-    // Convertir los nombres de los artículos en ObjectId, creando los artículos si no existen
-    const articulosObjectId = await Promise.all(req.body.articulos.map(async (nombreArticulo) => {
+    const articulosObjectId = await Promise.all(req.body.articulos.map(async (nombreArticulo, index) => {
         let articulo = await Articulo.findOne({ nombre: nombreArticulo });
         if (!articulo) {
-            articulo = await Articulo.create({ nombre: nombreArticulo, precio: 0 });  // Precio por defecto, se puede ajustar
+            const precio = parseInt(req.body.precios[index], 10);
+            articulo = await Articulo.create({ nombre: nombreArticulo, precio: precio });
         }
         return articulo._id;
     }));
@@ -40,7 +39,7 @@ const calcularTotalPedido = async (articulos, cantidades) => {
         if (!Array.isArray(articulos)) {
             throw new Error('Los artículos deben ser proporcionados como un array');
         }
-        // Obtener los precios de los artículos
+
         const precios = await Promise.all(articulos.map(async (nombreArticulo) => {
             const articulo = await Articulo.findOne({ nombre: nombreArticulo });
             if (!articulo) {
@@ -49,7 +48,6 @@ const calcularTotalPedido = async (articulos, cantidades) => {
             return articulo.precio;
         }));
 
-        // Calcular el precio total sumando el precio de cada artículo multiplicado por su cantidad
         const total = precios.reduce((acc, precio, index) => acc + (precio * cantidades[index]), 0);
 
         return total;
@@ -59,28 +57,26 @@ const calcularTotalPedido = async (articulos, cantidades) => {
     }
 };
 
-
-
-
-const modificarPedidos = asyncHandler( async (req, res) => {
+const modificarPedidos = asyncHandler(async (req, res) => {
     const pedido = await Pedido.findById(req.params.id);
-    if(!pedido){
+    if (!pedido) {
         res.status(404);
-        throw new Error('No se encontró la tarea');
+        throw new Error('No se encontró el pedido');
     }
-    const pedidoUpdated = await Pedido.findByIdAndUpdate(req.params.id, req.body, {new: true});
+    const pedidoUpdated = await Pedido.findByIdAndUpdate(req.params.id, req.body, { new: true });
     res.status(200).json(pedidoUpdated);
 });
 
-const borrarPedidos = asyncHandler( async (req, res) => {
+const borrarPedidos = asyncHandler(async (req, res) => {
     const pedidoDeleted = await Pedido.findById(req.params.id);
-    if(!pedidoDeleted){
+    if (!pedidoDeleted) {
         res.status(404);
-        throw new Error('No se encontró la tarea');
+        throw new Error('No se encontró el pedido');
     }
     await Pedido.deleteOne(pedidoDeleted);
-    res.status(200).json({message: `Se eliminó la tarea: ${req.params.id}`});
+    res.status(200).json({ message: `Se eliminó el pedido: ${req.params.id}` });
 });
+
 module.exports = {
     getPedidos, crearPedidos, modificarPedidos, borrarPedidos
-}
+};
