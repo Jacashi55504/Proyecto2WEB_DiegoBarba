@@ -63,9 +63,28 @@ const modificarPedidos = asyncHandler(async (req, res) => {
         res.status(404);
         throw new Error('No se encontró el pedido');
     }
-    const pedidoUpdated = await Pedido.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.status(200).json(pedidoUpdated);
+
+    // Recalcular el total del pedido
+    const articulosObjectId = await Promise.all(req.body.articulos.map(async (nombreArticulo, index) => {
+        let articulo = await Articulo.findOne({ nombre: nombreArticulo });
+        if (!articulo) {
+            const precio = parseInt(req.body.precios[index], 10);
+            articulo = await Articulo.create({ nombre: nombreArticulo, precio: precio });
+        }
+        return articulo._id;
+    }));
+
+    const total = await calcularTotalPedido(req.body.articulos, req.body.cantidades);
+
+    pedido.articulos = articulosObjectId;
+    pedido.cantidades = req.body.cantidades;
+    pedido.total = total;
+
+    await pedido.save();
+
+    res.status(200).json(pedido);
 });
+
 
 const borrarPedidos = asyncHandler(async (req, res) => {
     const pedidoDeleted = await Pedido.findById(req.params.id);
@@ -77,6 +96,35 @@ const borrarPedidos = asyncHandler(async (req, res) => {
     res.status(200).json({ message: `Se eliminó el pedido: ${req.params.id}` });
 });
 
+const borrarArticuloPedido = asyncHandler(async (req, res) => {
+    const pedido = await Pedido.findById(req.params.pedidoId).populate('articulos');
+    if (!pedido) {
+        res.status(404);
+        throw new Error('Pedido no encontrado');
+    }
+
+    const articuloIndex = pedido.articulos.findIndex(articuloId => articuloId._id.toString() === req.params.articuloId);
+    if (articuloIndex === -1) {
+        res.status(404);
+        throw new Error('Artículo no encontrado en el pedido');
+    }
+
+    pedido.articulos.splice(articuloIndex, 1);
+    pedido.cantidades.splice(articuloIndex, 1);
+
+    if (pedido.articulos.length === 0) {
+        await Pedido.deleteOne({ _id: req.params.pedidoId });
+        res.status(200).json({ message: 'Pedido eliminado porque no quedan artículos' });
+    } else {
+        const total = await calcularTotalPedido(pedido.articulos.map(articulo => articulo.nombre), pedido.cantidades);
+        pedido.total = total;
+        await pedido.save();
+        res.status(200).json({ message: 'Artículo eliminado del pedido', pedido });
+    }
+});
+
+
+
 module.exports = {
-    getPedidos, crearPedidos, modificarPedidos, borrarPedidos
+    getPedidos, crearPedidos, modificarPedidos, borrarPedidos, borrarArticuloPedido
 };
